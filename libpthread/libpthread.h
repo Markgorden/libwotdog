@@ -1,7 +1,7 @@
 /*
 */
-#ifndef _COE_LIB_PTHREAD_H_
-#define _COE_LIB_PTHREAD_H_
+#ifndef _TCP_LIB_PTHREAD_H_
+#define _TCP_LIB_PTHREAD_H_
 #ifdef __cplusplus
 extern "C"{
 #endif
