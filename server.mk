@@ -1,9 +1,18 @@
+##################################
+# 
+# Authors: ZhangXuelian
+# 	
+# 
+# Changes:
+# 	
+#	
+##################################
 ifeq ($(PLATFORM),UBUNTU64)
 	CROSS_COMPILE=
 	CC=$(CROSS_COMPILE)gcc
 	CXX=$(CROSS_COMPILE)g++
 	AR=$(CROSS_COMPILE)ar
-	RANLIB= $(CROSS_COoMPILE)ranlib
+	RANLIB= $(CROSS_COOMPILE)ranlib
 	STRIP=$(CROSS_COMPILE)strip
 	HOME=$(shell pwd)
 	export HOME

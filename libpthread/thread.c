@@ -1,4 +1,12 @@
+/*
+ Authors: ZhangXuelian
+ 	
 
+
+ Changes:
+ 	
+	
+*/
 #include "libpthread.h"
 #include "../libutility/libutility.h"
 

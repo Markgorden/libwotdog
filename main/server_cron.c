@@ -52,6 +52,8 @@ int clients_cron_handle_timeout(CLIENT * client, mstime_t now_ms)
 
 int clients_cron_resize_query_buffer(CLIENT * client) 
 {
+	if (client == NULL)
+		return false;
 	SERVER_CONTENT * c = &g_server_content;   
 	size_t querybuf_size = sdsAllocSize(client->querybuf);
     time_t idletime = c->unixtime - client->lastinteraction;
@@ -74,6 +76,11 @@ void clients_cron(void)
 {
 	SERVER_CONTENT * c = &g_server_content;   
     int numclients = dictSize(c->net.clients);
+	
+	if (0 == numclients) return;
+	
+	if (c->common.hz == 0) c->common.hz = 1;
+
     int iterations = numclients/c->common.hz;
     mstime_t now = mstime();
 
@@ -83,7 +90,7 @@ void clients_cron(void)
 
 	dictIterator * di = dictGetIterator(c->net.clients);
 	dictEntry * de;
-	CLIENT * client;
+	CLIENT * client = 0;
 
 	while((de = dictNext(di)) != NULL && iterations--) 
 	{
@@ -94,6 +101,7 @@ void clients_cron(void)
 		;//continue;
     if (clients_cron_resize_query_buffer(client))
 		;//continue;
+	write_to_client(client);
 }
 
 //--------------------------------------------------------
@@ -152,6 +160,9 @@ int server_cron(struct AE_EVENT_LOOP * event_loop, long long id, void * client_d
     UNUSED(event_loop);
     UNUSED(id);
     UNUSED(client_data);
+	if (c->common.hz == 0) c->common.hz = 1;
+
+	printf("this is a server_cron!\n");
     update_cached_time();
     c->lruclock = get_lru_clock();
 	run_with_period(5000) {
@@ -162,6 +173,7 @@ int server_cron(struct AE_EVENT_LOOP * event_loop, long long id, void * client_d
 			{
                 printf("%lld clients connected in %lld slots HT.%zu bytes in use",used, size,zmalloc_used_memory());
             }
+			printf("run_with_period--------------------\n");
     }
     clients_cron();
 	hashtable_cron();

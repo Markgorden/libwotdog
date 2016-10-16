@@ -1,3 +1,12 @@
+##################################
+# 
+# Authors: ZhangXuelian
+# 	
+# 
+# Changes:
+# 	
+#	
+##################################
 subdirs = libaenet libstl libutility libpthread liblog libcrypt libuuid libprotocol #liblua
 subdirs += main
 HOME=$(shell pwd)

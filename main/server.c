@@ -1,5 +1,12 @@
 /*
- */
+ Authors: ZhangXuelian
+ 	
+
+
+ Changes:
+ 	
+	
+*/
 
 #include "server.h"
 
@@ -29,6 +36,17 @@ int dictClientHnadlerPtrCompare(void * privdata,const void * key1,const void * k
 	return a->client_type == b->client_type;
 }
 
+int dictStrKeyCompare(void *privdata, const void *key1, const void *key2)
+{
+	int l1,l2;
+	DICT_NOTUSED(privdata);
+	l1 = strlen((char*)key1);
+	l2 = strlen((char*)key2);
+	if (l1 != l2) return 0;
+	return memcmp(key1, key2, l1) == 0;
+}
+
+// static dictType KeyClientPtrDictType = {dictSdsHash, NULL, NULL, dictClientPtrCompare, NULL, NULL};
 static dictType KeyClientPtrDictType = {dictSdsHash, NULL, NULL, dictClientPtrCompare, NULL, NULL};
 static dictType KeyClientHanderPtrDictType = {dictSdsHash, NULL, NULL, dictClientHnadlerPtrCompare, NULL, NULL};
 
@@ -58,7 +76,11 @@ static void accept_common_handler(int fd, int flags, char *ip)
 	//	free_client(client);
 	//	return;
 	//}
-	if (fd != -1) set_element(c->net.clients,client->id, client);
+	char * key = malloc(11 + 1);
+	int len = sprintf(key, "%d", client->fd);
+
+	if (fd != -1) 
+		set_element(c->net.clients_temp, key, client);
 	c->net.stat_numconnections++;
 	client->flags |= flags;
 }
@@ -92,17 +114,15 @@ void accept_unix_handler(AE_EVENT_LOOP * el, int fd, void * privdata, int mask)
 	UNUSED(mask);
 	UNUSED(privdata);
 
-	while(max--) {
-		cfd = ae_net_unix_accept(c->net.neterr, fd);
-		if (cfd == AE_NET_ERR) {
-			if (errno != EWOULDBLOCK)
-				serverLog(LL_WARNING,
-				"Accepting client connection: %s", c->net.neterr);
-			return;
-		}
-		//serverLog(LL_VERBOSE,"Accepted connection to %s", c->net.unixsocket);
-		accept_common_handler(cfd,CLIENT_UNIX_SOCKET,NULL);
-	}
+	//while(max--) {
+	//	cfd = ae_net_unix_accept(c->net.neterr, fd);
+	//	if (cfd == AE_NET_ERR) {
+	//		if (errno != EWOULDBLOCK)
+	//			OutputDebugStringA("Accepting client connection: %s", c->net.neterr);
+	//		return;
+	//	}
+	//	accept_common_handler(cfd,CLIENT_UNIX_SOCKET,NULL);
+	//}
 }
 
 
@@ -114,7 +134,6 @@ int listen_to_port(int port, int *fds, int *count)
 		c->net.bindaddr[0] = NULL;
     for (j = 0; j < c->net.bindaddr_count || j == 0; j++) 
 	{
-         /* bind ipv4 address. */
         fds[*count] = ae_net_tcp_server(c->net.neterr,port,c->net.bindaddr[j],c->net.tcp_backlog);
         if (fds[*count] == AE_NET_ERR)
 		{
@@ -135,34 +154,19 @@ void init_server(void)
     SERVER_CONTENT * c = &g_server_content;
 	int j;
     c->common.pid = getpid();
-    c->common.client_handler = dictCreate(&KeyClientHanderPtrDictType,NULL);
+    //c->common.client_handler = dictCreate(&KeyClientHanderPtrDictType,NULL);
 	c->common.client_handler = listCreate();
 	//c->net.current_client = NULL;
     c->net.clients = dictCreate(&KeyClientPtrDictType,NULL);
-    c->net.clients_to_close = listCreate();
+    c->net.clients_temp = dictCreate(&KeyClientPtrDictType,NULL);
+	c->net.clients_to_close = listCreate();
+
+	c->net.port = 8080;
 	// 初始的连接数
 	c->net.el = ae_create_event_loop(c->maxclients+CONFIG_FDSET_INCR);
     if (c->net.port != 0 &&
         listen_to_port(c->net.port, c->net.ipfd, &c->net.ipfd_count) == C_ERR)
         exit(1);
-
- //   if (c->net.unixsocket != NULL) 
-	//{
- //       unlink(c->net.unixsocket); 
- //       c->net.sofd = ae_net_unix_server(c->net.neterr,c->net.unixsocket,
- //           c->net.unixsocketperm, c->net.tcp_backlog);
- //       if (c->net.sofd == AE_NET_ERR) {
- //           serverLog(LL_WARNING, "Opening Unix socket: %s", c->net.neterr);
- //           exit(1);
- //       }
- //       ae_net_non_block(NULL,c->net.sofd);
- //   }
-
- //   if (c->net.ipfd_count == 0 && c->net.sofd < 0) 
-	//{
- //       serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
- //       exit(1);
- //   }
 
 	update_cached_time();
 
@@ -180,28 +184,13 @@ void init_server(void)
                 serverLog(LL_WARNING,"Unrecoverable error creating server.ipfd file event.");
             }
     }
-  //  if (c->net.sofd > 0 && ae_create_file_event(c->net.el,c->net.sofd,AE_READABLE,
-		//accept_unix_handler,NULL) == AE_ERR) 
-		//serverLog(LL_WARNING,"Unrecoverable error creating server.sofd file event.");
-    //bio_init();
-}
-
-/* Write event handler. Just send data to the client. */
-void write_handler_to_client(AE_EVENT_LOOP * el, int fd, void * privdata, int mask)
-{
-	UNUSED(el);
-	UNUSED(mask);
-	write_to_client(fd);
 }
 
 void before_sleep(struct AE_EVENT_LOOP * eventLoop) 
 {
 	UNUSED(eventLoop);
 	SERVER_CONTENT * c = &g_server_content;
-	if(ae_create_file_event(c->net.el, c->net.fd, AE_WRITABLE,write_handler_to_client, NULL) == AE_ERR)
-	{
-		printf("Error create file event...%s\n",__func__);
-	}
+	clients_cron();
 }
 
 void create_pid_file(void) 
@@ -235,17 +224,45 @@ void daemonize(void)
 void add_client_handler(CLIENT_HANDLER_LIST * p)
 {
 	SERVER_CONTENT * c = &g_server_content;
-	CLIENT_HANDLER * cli_handler = malloc(sizeof(CLIENT_HANDLER));
-	COMMAND_CLIENT_HANDLER * cmd_cli_handler = malloc(sizeof(COMMAND_CLIENT_HANDLER));
-	memcpy(cli_handler->sub_client_handler,p->client_handler->sub_client_handler,sizeof(COMMAND_CLIENT_HANDLER));
-	memcpy(cli_handler,p->client_handler,sizeof(CLIENT_HANDLER));
-	cli_handler->sub_client_handler = cmd_cli_handler;
-	listAddNodeTail(c->common.client_handler,cli_handler);
+	listAddNodeTail(c->common.client_handler,p);
 }
+
+const char *config_options[] = {
+  "C", "cgi_pattern", "**.cgi$|**.pl$|**.php$",
+  "E", "cgi_environment", NULL,
+  "G", "put_delete_passwords_file", NULL,
+  "I", "cgi_interpreter", NULL,
+  "P", "protect_uri", NULL,
+  "R", "authentication_domain", "mydomain.com",
+  "S", "ssi_pattern", "**.shtml$|**.shtm$",
+  "a", "access_log_file", NULL,
+  "c", "ssl_chain_file", NULL,
+  "d", "enable_directory_listing", "yes",
+  "e", "error_log_file", NULL,
+  "g", "global_passwords_file", NULL,
+  "i", "index_files", "index.html,index.htm,index.cgi",
+  "k", "enable_keep_alive", "no",
+  "l", "access_control_list", NULL,
+  "M", "max_request_size", "16384",
+  "m", "extra_mime_types", NULL,
+  "p", "listening_ports", "8080",
+  "r", "document_root",  ".",
+  "s", "ssl_certificate", NULL,
+  "t", "num_threads", "10",
+  "u", "run_as_user", NULL,
+  "w", "url_rewrite_patterns", NULL,
+  "z", "daemonize",NULL,
+  NULL
+};
 
 int main(int argc, char ** argv) 
 {
-    SERVER_CONTENT * c = &g_server_content;
+	/* Update config based on command line arguments */   
+	char * options[MAX_OPTIONS];
+	// process_command_line_arguments(argv, options);
+	SERVER_CONTENT * c = &g_server_content;
+	// get_config(c->config_ex, (const char **)options);
+
     struct timeval tv;
     int j;
     setlocale(LC_COLLATE,"");
@@ -256,23 +273,31 @@ int main(int argc, char ** argv)
     dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());
     init_server();
 	// 添加服务器将要处理的协议handler
-	
 	COMMAND_CLIENT_HANDLER cch ;
 	cch.a = 0;
 	cch.b = 0;
 	cch.c = 0;
 	cch.d = 0;
 	
-	CLIENT_HANDLER_LIST p;
-	p.client_handler->parse_recved_data = parse_command_recved_data;
-	p.client_handler->sub_client_handler = &cch;
-	p.client_type = COMMAND_CLIENT;
-	p.magic = PROTOCOL_MAGIC;
-	add_client_handler(&p);
+	CLIENT_HANDLER_LIST * p = malloc(sizeof(CLIENT_HANDLER_LIST));
+	p->client_handler = malloc(sizeof(CLIENT_HANDLER));
+	p->client_handler->parse_recved_data = parse_command_recved_data;
+	p->client_handler->sub_client_handler = &cch;
+	p->client_type = COMMAND_CLIENT;
+	p->magic = PROTOCOL_MAGIC;
+	add_client_handler(p);
+	//free(p->client_handler);
+	//free(p);
 
     // 进入服务器循环
 	ae_set_before_sleep_proc(c->net.el,before_sleep);
 	ae_main(c->net.el);
     ae_delete_event_loop(c->net.el);
-    return 0;
+    
+	int i = 0;
+	for (; options[i] != NULL; i++) 
+	{
+		free(options[i]);
+	}
+	return 0;
 }

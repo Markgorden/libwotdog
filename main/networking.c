@@ -1,5 +1,12 @@
 /*
- */
+ Authors: ZhangXuelian
+ 	
+
+
+ Changes:
+ 	
+	
+*/
 
 #include "server.h"
 #include <sys/uio.h>
@@ -45,7 +52,7 @@ sds cat_client_info_string(sds s, CLIENT * client)
 		(unsigned long long) sdslen(client->querybuf),
 		(unsigned long long) sdsavail(client->querybuf),
 		(unsigned long long) client->bufpos,
-		(unsigned long long) listLength(client->reply),
+		0,
 		events
 		);
 }
@@ -69,8 +76,8 @@ bool probe_procotol_packet(CLIENT * client)
 				return true;
 			}
 		}
-		return false;
 	}
+	return false;
 }
 
 static inline bool parse_temp_recved_data(CLIENT * client)
@@ -171,13 +178,13 @@ CLIENT * create_client(int fd)
 	ae_net_enable_tcp_no_delay(NULL,fd);
 	if (content->config.tcpkeepalive)
 		ae_net_keep_alive(NULL,fd,content->config.tcpkeepalive);
-	if (ae_create_file_event(content->net.el,fd,AE_READABLE,read_handler_for_client, c) == AE_ERR)
+	if (ae_create_file_event(content->net.el,fd, AE_READABLE, 
+		read_handler_for_client, c) == AE_ERR)
 	{
 		close(fd);
 		zfree(c);
 		return NULL;
 	}
-	//c->id = content->net.next_client_id++;
 	c->fd = fd;
 	c->querybuf = sdsempty();
 	c->querybuf_peak = 0;
@@ -185,23 +192,27 @@ CLIENT * create_client(int fd)
     c->flags = 0;
     c->ctime = c->lastinteraction = content->unixtime;
     c->authenticated = 0;
+	c->buf_len = 0;
+	c->buf = NULL;
+	c->bufpos = 0;
+	init_protocol_context(&c->buf_list);
 	if (fd != -1) 
-		;//int retval = set_element(content->net.clients, key, c);
+		//int retval = set_element(content->net.clients_temp, fd, c);
     return c;
 }
 
 void unlink_client(CLIENT * client) 
 {
-    SERVER_CONTENT * c = &g_server_content;
-	if (c->net.current_client == c) c->net.current_client = NULL;
-    if (client->fd != -1) 
-	{
-        delete_element(c->net.clients, client->id);
-        ae_delete_file_event(c->net.el,client->fd,AE_READABLE);
-        ae_delete_file_event(c->net.el,client->fd,AE_WRITABLE);
-        close(client->fd);
-        client->fd = -1;
-    }
+ //   SERVER_CONTENT * c = &g_server_content;
+	//if (c->net.current_client == c) c->net.current_client = NULL;
+ //   if (client->fd != -1) 
+	//{
+ //       delete_element(c->net.clients, client->id);
+ //       ae_delete_file_event(c->net.el,client->fd,AE_READABLE);
+ //       ae_delete_file_event(c->net.el,client->fd,AE_WRITABLE);
+ //       close(client->fd);
+ //       client->fd = -1;
+ //   }
 }
 
 void free_client(CLIENT * client) 
@@ -221,93 +232,32 @@ void free_client_async(CLIENT * client)
 	listAddNodeTail(c->net.clients_to_close,client);
 }
 
-int client_has_pending_replies(CLIENT * client) 
+int write_to_client(CLIENT * c) 
 {
-	return client->bufpos || listLength(client->reply);
+	SERVER_CONTENT * content = &g_server_content;
+	int fd = c->fd;
+	int len;
+	if (c->buf_len)
+	{
+		len = send(fd, c->buf + c->bufpos, c->buf_len, MSG_NOSIGNAL);
+		if (0 >= len)
+		{
+			printf("%s: send failed %d\n", __func__, 2);
+			return false;
+		}
+		c->bufpos += len;
+		c->buf_len -= len;
+	}
+
+	if (! c->buf_len)
+	{
+		c->bufpos = 0;
+		//if (c->buf != NULL ) 
+		//	zfree(c->buf);
+		get_protocol_packet_to_send(&c->buf_list, &c->buf, &c->buf_len);
+	}
+	return 1;
 }
-
-int write_to_client(int fd, CLIENT * client, int handler_installed) 
-{
-    SERVER_CONTENT * c = &g_server_content;
-	ssize_t nwritten = 0, totwritten = 0;
-    size_t objlen;
-    size_t objmem;
-	void * o;
-	// .....
-
-    while(client_has_pending_replies(client)) 
-	{
-        if (client->bufpos > 0) 
-		{
-            nwritten = write(fd,client->buf + client->sentlen, client->bufpos - client->sentlen);
-            if (nwritten <= 0) break;
-            client->sentlen += nwritten;
-            totwritten += nwritten;
-            if ((int)client->sentlen == client->bufpos) 
-			{
-                client->bufpos = 0;
-                client->sentlen = 0;
-            }
-        } 
-		else 
-		{
-            o = listNodeValue(listFirst(client->reply));
-            // objlen = sdslen(o->ptr);
-            if (objlen == 0) 
-			{
-                listDelNode(client->reply,listFirst(client->reply));
-                client->reply_bytes -= objmem;
-                continue;
-            }
-
-           // nwritten = write(fd, ((char*)o->ptr)+ client->sentlen,objlen - client->sentlen);
-            if (nwritten <= 0) break;
-            client->sentlen += nwritten;
-            totwritten += nwritten;
-            if (client->sentlen == objlen) 
-			{
-                listDelNode(client->reply,listFirst(client->reply));
-                client->sentlen = 0;
-                client->reply_bytes -= objmem;
-            }
-        }
-        c->log.stat_net_output_bytes += totwritten;
-        if (totwritten > NET_MAX_WRITES_PER_EVENT && (c->maxmemory == 0 ||
-             zmalloc_used_memory() < c->maxmemory)) 
-			 break;
-    }
-    if (nwritten == -1) 
-	{
-        if (errno == EAGAIN) 
-		{
-            nwritten = 0;
-        } 
-		else 
-		{
-            serverLog(LL_VERBOSE,"Error writing to client: %s", strerror(errno));
-            free_client(client);
-            return C_ERR;
-        }
-    }
-    if (totwritten > 0) 
-	{
-        if (!(client->flags & CLIENT_MASTER)) 
-			client->lastinteraction = c->unixtime;
-    }
-    if (!client_has_pending_replies(client)) 
-	{
-        client->sentlen = 0;
-        if (handler_installed) ae_delete_file_event(c->net.el, client->fd,AE_WRITABLE);
-        if (client->flags & CLIENT_CLOSE_AFTER_REPLY) 
-		{
-            free_client(client);
-            return C_ERR;
-        }
-    }
-    return C_OK;
-}
-
-
 
 void reset_client(CLIENT *c) 
 {

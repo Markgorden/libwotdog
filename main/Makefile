@@ -1,8 +1,17 @@
+##################################
+# 
+# Authors: ZhangXuelian
+# 	
+# 
+# Changes:
+# 	
+#	
+##################################
 #-------------------------------------------------
 include ../config.mk
 include ../server.mk
 
-EXTRALIB += -lae_stl -lae_pthread -lae_net -lae_utility -lae_log -lae_protocol
+EXTRALIB += -lae_stl -lae_pthread -lae_net -lae_log -lae_protocol -lae_utility
 EXTRALIB += -lpthread#-ldl -lm -lc 
 
 ifeq ($(USE_SSL),y)
@@ -10,7 +19,7 @@ EXTRALIB += -lssl -lcrypto
 endif
 
 #-------------------------------------------------
-OBJS = server.o server_cron.o t_dict.o networking.o
+OBJS = server.o server_cron.o t_dict.o networking.o option.o
 #-------------------------------------------------
 TARGET = main
 #-------------------------------------------------

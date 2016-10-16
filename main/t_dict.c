@@ -1,3 +1,12 @@
+/*
+ Authors: ZhangXuelian
+ 	
+
+
+ Changes:
+ 	
+	
+*/
 #include "server.h"
 
 //int dictSdsKeyCompare(void *privdata, const void *key1,

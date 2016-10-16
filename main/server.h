@@ -1,5 +1,10 @@
 /*
  All source file must include this head file
+ 
+ Authors: ZhangXuelian
+
+ Changes:
+ 	
  */
 
 #ifndef __SERVER_H__
@@ -46,6 +51,7 @@
 #include "../libcrypt/libcrypt.h"
 #include "../libuuid/libc_uuid/get_uuid.h"
 #include "../libpthread/libpthread.h"
+#include "../libprotocol/protocol.h"
 // for lua
 #include "lua/lua.h"
 #include "lua/luaconf.h"
@@ -82,17 +88,7 @@
 
 typedef long long mstime_t; /* millisecond time type. */
 
-// 需要处理的私有协议，加在这里。
-// 1、要支持的私有协议的客户端类型
-typedef enum {
-	UNKNOWN_CLIENT = 0,
-	HTTP_CLIENT,
-	COMMAND_CLIENT,
-	LOG_CLIENT,
-} CLIENT_TYPE;
-
-// 2、要支持的私有协议的头文件。
-#include "../libprotocol/cmd_proto.h"
+#include "../libprotocol/protocol.h"
 
 // client protocol handler
 typedef struct __tag_client_handler
@@ -170,7 +166,8 @@ typedef struct __tag_Server_Context
 		int sofd; 
 		int cfd_count; 
 
-		dict * clients;
+		dict * clients;      // the key is device_info
+		dict * clients_temp; // the key is fd.
 		list * clients_to_close; 
 		list * clients_pending_write;
 		CLIENT * current_client; 
@@ -182,11 +179,12 @@ typedef struct __tag_Server_Context
 		long long stat_numconnections;
 		long long stat_rejected_conn; 
 	} net;
-
+	
+	#define NUM_OPTIONS 20
+	char * config_ex[NUM_OPTIONS];    // server configuration parameters
 	struct {
 		int maxidletime;              
 		int tcpkeepalive;             
-		int active_expire_enabled;    
 		size_t client_max_querybuf_len;
 		int supervised;                
 		int supervised_mode;           
@@ -230,6 +228,7 @@ dictEntry * get_random_element(dict * db);
 
 // server_scron.c
 int server_cron(struct AE_EVENT_LOOP * event_loop, long long id, void * client_data);
+void clients_cron(void);
 void update_cached_time(void);
 
 // networking.c
@@ -237,6 +236,12 @@ CLIENT * create_client(int fd);
 void free_client_async(CLIENT *c);
 void free_client(CLIENT *c);
 void send_reply_to_client(AE_EVENT_LOOP * el, int fd, void * privdata, int mask);
+
+// option.c
+#define MAX_OPTIONS 40
+extern const char *config_options[];
+void process_command_line_arguments(char *argv[], char **options);
+void get_config(char ** config, const char **options) ;
 
 #endif
 

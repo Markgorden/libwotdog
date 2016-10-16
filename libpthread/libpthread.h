@@ -1,4 +1,11 @@
 /*
+ Authors: ZhangXuelian
+ 	
+
+
+ Changes:
+ 	
+	
 */
 #ifndef _TCP_LIB_PTHREAD_H_
 #define _TCP_LIB_PTHREAD_H_
