@@ -45,7 +45,7 @@ extern "C"{
 #include <sys/soundcard.h>
 
 #include <linux/tcp.h>
-#include "coe_lib_types.h"
+#include "tcp_lib_types.h"
 
 #define MIN_PRIORITY 0
 #define MAX_PRIORITY 5
