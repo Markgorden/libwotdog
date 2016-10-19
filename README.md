@@ -1,27 +1,20 @@
 # 号称百万级TCP在线服务器框架
 
 1、占用内存少，事件模型，高效，百万级TCP在线。主要用于百万级物联网设备的入网连接。
-
 2、同一端口复用各种通用协议。
-
 3、默认实现http协议。
-
 4、默认实现ws协议。
-
 5、随意添加私有二进制协议。
 
 # 特点
-https://github.com/Markgorden/megascale_tcp_online_base_framework/blob/master/main/networking.c   Buffer处理那里。
-按frame解析，最省 资源。
-绝对 是 目前最省 资源的 方式 了。
+https://github.com/Markgorden/megascale_tcp_online_base_framework/blob/master/main/networking.c  
+Buffer处理那里。按frame解析，最省 资源。绝对 是 目前最省 资源的 方式 了。
 Kqueue一定要加。
-二进制协议，解析处理那里
-并且，可以灵活添加 各种 自定义的 二进制 协 议。
+二进制协议，解析处理那里,并且，可以灵活添加 各种 自定义的 二进制 协 议。
 当然 也可以轻松地 支持各种 rtp ,rtsp,之类的。
 一点问题都没有，并且都复用在一个端口上。
 同一个端口，解决一切问题。
-协议自动匹配
-即注册一个 协议，就可以 处理这个协议了。
+协议自动匹配,即注册一个 协议，就可以 处理这个协议了。
 注册一个协议——给一个协议名称，以及相应的处理函数。
 在进入服务器循环之前。
 注册 需要处理的 协议。
