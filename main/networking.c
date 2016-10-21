@@ -58,7 +58,7 @@ sds cat_client_info_string(sds s, CLIENT * client)
 }
 
 
-bool probe_procotol_packet(CLIENT * client)
+bool probe_protocol_packet(CLIENT * client)
 {
 	SERVER_CONTENT * c = &g_server_content;
 	listNode *ln;
@@ -90,7 +90,7 @@ static inline bool parse_temp_recved_data(CLIENT * client)
 		client->reqtype = HTTP_CLIENT;
 		client->client_handler = 0; // 这是一个Http客户端。内置客户端。
 	}
-	else if (probe_procotol_packet(client))	
+	else if (probe_protocol_packet(client))	
 	{
 		printf("probe protocol connect req\n");
 		return client->client_handler->parse_recved_data(client);
@@ -110,11 +110,13 @@ void process_input_buffer(CLIENT * client)
 
 	bool ret = false;
 	if (client->reqtype == UNKNOWN_CLIENT)
+	{
 		if (!parse_temp_recved_data(client))
 			goto error;
-		else
-			// 用各自的私有协议处理器去处理。
-			client->client_handler->parse_recved_data(client);
+	}
+	else
+		// 用各自的私有协议处理器去处理。
+		client->client_handler->parse_recved_data(client);
 error:
 	;
 }
@@ -178,6 +180,9 @@ CLIENT * create_client(int fd)
 	ae_net_enable_tcp_no_delay(NULL,fd);
 	if (content->config.tcpkeepalive)
 		ae_net_keep_alive(NULL,fd,content->config.tcpkeepalive);
+	//if (ae_create_file_event(content->net.el, fd, AE_WRITABLE,
+	//	send_reply_to_client, c) == AE_ERR)
+	//	;
 	if (ae_create_file_event(content->net.el,fd, AE_READABLE, 
 		read_handler_for_client, c) == AE_ERR)
 	{
@@ -195,6 +200,7 @@ CLIENT * create_client(int fd)
 	c->buf_len = 0;
 	c->buf = NULL;
 	c->bufpos = 0;
+	c->cmd_list = listCreate();
 	init_protocol_context(&c->buf_list);
 	if (fd != -1) 
 		//int retval = set_element(content->net.clients_temp, fd, c);
@@ -217,7 +223,8 @@ void unlink_client(CLIENT * client)
 
 void free_client(CLIENT * client) 
 {
-    sdsfree(client->querybuf);
+	return;
+	sdsfree(client->querybuf);
     client->querybuf = NULL;
     //if (client->flags & CLIENT_BLOCKED) unblock_client(client);
     unlink_client(client);
@@ -232,13 +239,29 @@ void free_client_async(CLIENT * client)
 	listAddNodeTail(c->net.clients_to_close,client);
 }
 
+void send_reply_to_client(AE_EVENT_LOOP * el, int fd, void * privdata, int mask)
+{
+	write_to_client((CLIENT *)privdata);
+}
+
 int write_to_client(CLIENT * c) 
 {
 	SERVER_CONTENT * content = &g_server_content;
 	int fd = c->fd;
 	int len;
-	if (c->buf_len)
+
+	if (!c->buf_len)
 	{
+		c->bufpos = 0;
+		//if (c->buf != NULL ) 
+		//	zfree(c->buf);
+		// get_protocol_packet_to_send(&c->buf_list, &c->buf, &c->buf_len);
+	}
+
+	while (c->buf_len)
+	{
+		if (c->buf_len)
+		{
 		len = send(fd, c->buf + c->bufpos, c->buf_len, MSG_NOSIGNAL);
 		if (0 >= len)
 		{
@@ -249,12 +272,13 @@ int write_to_client(CLIENT * c)
 		c->buf_len -= len;
 	}
 
-	if (! c->buf_len)
-	{
-		c->bufpos = 0;
-		//if (c->buf != NULL ) 
-		//	zfree(c->buf);
-		get_protocol_packet_to_send(&c->buf_list, &c->buf, &c->buf_len);
+		if (!c->buf_len)
+		{
+			c->bufpos = 0;
+			//if (c->buf != NULL ) 
+			//	zfree(c->buf);
+			// get_protocol_packet_to_send(&c->buf_list, &c->buf, &c->buf_len);
+		}
 	}
 	return 1;
 }

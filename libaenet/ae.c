@@ -99,8 +99,10 @@ int ae_create_file_event(AE_EVENT_LOOP * event_loop, int fd, int mask,AeFileProc
     if (api_add_event(event_loop, fd, mask) == -1)
         return AE_ERR;
     fe->mask |= mask;
-    if (mask & AE_READABLE) fe->rfile_proc = proc;
-    if (mask & AE_WRITABLE) fe->wfile_proc = proc;
+    if (mask & AE_READABLE) 
+		fe->rfile_proc = proc;
+    if (mask & AE_WRITABLE) 
+		fe->wfile_proc = proc;
     fe->client_data = client_data;
     if (fd > event_loop->max_fd)
         event_loop->max_fd = fd;
